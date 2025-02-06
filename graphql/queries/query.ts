@@ -207,4 +207,142 @@ export const signIn = gql`
   }
 `;
 
-  
+export const onProjectCreated = gql`
+  subscription OnProjectCreated {
+    projectCreated {
+      id
+      name
+      description
+      createdAt
+      tasks {
+        id
+        title
+        status
+      }
+    }
+  }
+`;
+
+export const onProjectUpdated = gql`
+  subscription OnProjectUpdated {
+    projectUpdated {
+      id
+      name
+      description
+      createdAt
+      tasks {
+        id
+        title
+        status
+      }
+    }
+  }
+`;
+
+export const onProjectDeleted = gql`
+  subscription OnProjectDeleted {
+    projectDeleted {
+      id
+      name
+      description
+    }
+  }
+`;
+
+// Task Subscriptions
+export const onTaskCreated = gql`
+  subscription OnTaskCreated {
+    taskCreated {
+      id
+      title
+      description
+      status
+      createdAt
+      project {
+        id
+        name
+        description
+      }
+      assignedTo {
+        id
+        name
+        email
+      }
+    }
+  }
+`;
+
+export const onTaskUpdated = gql`
+  subscription OnTaskUpdated {
+    taskUpdated {
+      id
+      title
+      description
+      status
+      createdAt
+      project {
+        id
+        name
+        description
+      }
+      assignedTo {
+        id
+        name
+        email
+      }
+    }
+  }
+`;
+
+export const onTaskDeleted = gql`
+  subscription OnTaskDeleted {
+    taskDeleted {
+      id
+      title
+      status
+      project {
+        id
+        name
+      }
+      assignedTo {
+        id
+        name
+      }
+    }
+  }
+`;
+
+export const onTaskAssigned = gql`
+  subscription OnTaskAssigned {
+    taskAssigned {
+      id
+      title
+      status
+      project {
+        id
+        name
+      }
+      assignedTo {
+        id
+        name
+        email
+      }
+    }
+  }
+`;
+
+// User Subscriptions
+export const onUserCreated = gql`
+  subscription OnUserCreated {
+    userCreated {
+      id
+      name
+      email
+      tasks {
+        id
+        title
+        status
+      }
+    }
+  }
+`;

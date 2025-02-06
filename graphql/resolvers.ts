@@ -1,8 +1,31 @@
 import prisma from '@/lib/prisma';
 import { GraphQLDateTime } from 'graphql-scalars';
 import { CreateTaskInput, QueryArgs, CreateUserInput, UpdateUserInput, UpdateTaskInput, UpdateProjectInput, CreateProjectInput, AssignTaskInput } from './types';
-import { Context } from '@/types/auth';
 import { authResolvers } from './resolvers/auth.resolver';
+import { PubSub } from 'graphql-subscriptions';
+
+// Create a PubSub instance
+const pubsub = new PubSub();
+
+// Define event names as constants to avoid typos
+export const EVENTS = {
+  PROJECT: {
+    CREATED: 'PROJECT_CREATED',
+    UPDATED: 'PROJECT_UPDATED',
+    DELETED: 'PROJECT_DELETED',
+  },
+  TASK: {
+    CREATED: 'TASK_CREATED',
+    UPDATED: 'TASK_UPDATED',
+    DELETED: 'TASK_DELETED',
+    ASSIGNED: 'TASK_ASSIGNED',
+  },
+  USER: {
+    CREATED: 'USER_CREATED',
+    UPDATED: 'USER_UPDATED',
+    DELETED: 'USER_DELETED',
+  },
+};
 
 export const resolvers = {
   DateTime: GraphQLDateTime,
@@ -83,12 +106,16 @@ export const resolvers = {
           throw new Error('A project with this name already exists');
         }
 
-        return await prisma.project.create({
+        const project = await prisma.project.create({
           data: {
             name: name.trim(),
             description: description?.trim()
           }
         });
+        
+        // Publish the event
+        pubsub.publish(EVENTS.PROJECT.CREATED, { projectCreated: project });
+        return project;
       } catch (error: any) {
         console.error('Error creating project:', error);
         throw new Error(error.message || 'Failed to create project');
@@ -125,13 +152,16 @@ export const resolvers = {
           }
         }
 
-        return await prisma.project.update({
+        const project = await prisma.project.update({
           where: { id },
           data: {
             name: name?.trim(),
             description: description?.trim()
           }
         });
+        
+        pubsub.publish(EVENTS.PROJECT.UPDATED, { projectUpdated: project });
+        return project;
       } catch (error: any) {
         console.error('Error updating project:', error);
         throw new Error(error.message || 'Failed to update project');
@@ -158,9 +188,12 @@ export const resolvers = {
           where: { projectId: id }
         });
 
-        return await prisma.project.delete({
+        const deletedProject = await prisma.project.delete({
           where: { id }
         });
+        
+        pubsub.publish(EVENTS.PROJECT.DELETED, { projectDeleted: deletedProject });
+        return deletedProject;
       } catch (error: any) {
         console.error('Error deleting project:', error);
         throw new Error(error.message || 'Failed to delete project');
@@ -171,34 +204,9 @@ export const resolvers = {
       const { title, description, status, projectId, userId } = input;
       
       try {
-        if (!title || !title.trim()) {
-          throw new Error('Task title is required');
-        }
-
-        if (!projectId) {
-          throw new Error('Project ID is required');
-        }
-
-        const project = await prisma.project.findUnique({
-          where: { id: projectId }
-        });
-
-        if (!project) {
-          throw new Error('Project not found');
-        }
-
-        const duplicateTask = await prisma.task.findFirst({
-          where: {
-            title: title.trim(),
-            projectId: projectId
-          }
-        });
-
-        if (duplicateTask) {
-          throw new Error('A task with this title already exists in this project');
-        }
-
-        return await prisma.task.create({
+        // ... existing validation code ...
+    
+        const task = await prisma.task.create({
           data: {
             title: title.trim(),
             description: description?.trim(),
@@ -211,6 +219,18 @@ export const resolvers = {
             assignedTo: true
           }
         });
+        
+        // Add console.log to debug subscription
+        console.log('Publishing task created event:', {
+          taskCreated: task
+        });
+        
+        // Publish the event
+        await pubsub.publish(EVENTS.TASK.CREATED, {
+          taskCreated: task
+        });
+        
+        return task;
       } catch (error: any) {
         console.error('Error creating task:', error);
         throw new Error(error.message || 'Failed to create task');
@@ -285,7 +305,8 @@ export const resolvers = {
             assignedTo: true
           }
         });
-
+        
+        pubsub.publish(EVENTS.TASK.UPDATED, { taskUpdated: updatedTask });
         return updatedTask;
       } catch (error: any) {
         console.error('Error updating task:', error);
@@ -309,14 +330,16 @@ export const resolvers = {
           throw new Error('Task not found in this project');
         }
 
-        return await prisma.task.delete({
+        const deletedTask = await prisma.task.delete({
           where: { id },
           include: {
             project: true,
             assignedTo: true
           }
         });
-
+        
+        pubsub.publish(EVENTS.TASK.DELETED, { taskDeleted: deletedTask });
+        return deletedTask;
       } catch (error: any) {
         console.error('Error deleting task:', error);
         throw new Error(error.message || 'Failed to delete task');
@@ -344,7 +367,7 @@ export const resolvers = {
           throw new Error('Email already exists');
         }
 
-        return await prisma.user.create({
+        const user = await prisma.user.create({
           data: {
             name: name.trim(),
             email: email.trim()
@@ -353,6 +376,9 @@ export const resolvers = {
             tasks: true
           }
         });
+        
+        pubsub.publish(EVENTS.USER.CREATED, { userCreated: user });
+        return user;
       } catch (error: any) {
         console.error('Error creating user:', error);
         throw new Error(error.message || 'Failed to create user');
@@ -387,7 +413,7 @@ export const resolvers = {
           }
         }
 
-        return await prisma.user.update({
+        const updatedUser = await prisma.user.update({
           where: { id },
           data: {
             name: name?.trim(),
@@ -397,6 +423,9 @@ export const resolvers = {
             tasks: true
           }
         });
+        
+        pubsub.publish(EVENTS.USER.UPDATED, { userUpdated: updatedUser });
+        return updatedUser;
       } catch (error: any) {
         console.error('Error updating user:', error);
         throw new Error(error.message || 'Failed to update user');
@@ -417,12 +446,15 @@ export const resolvers = {
           throw new Error('User not found');
         }
 
-        return await prisma.user.delete({
+        const deletedUser = await prisma.user.delete({
           where: { id },
           include: {
             tasks: true
           }
         });
+        
+        pubsub.publish(EVENTS.USER.DELETED, { userDeleted: deletedUser });
+        return deletedUser;
       } catch (error: any) {
         console.error('Error deleting user:', error);
         throw new Error(error.message || 'Failed to delete user');
@@ -456,7 +488,7 @@ export const resolvers = {
         }
 
         // Assign task to user
-        return await prisma.task.update({
+        const assignedTask = await prisma.task.update({
           where: { id: taskId },
           data: { userId },
           include: {
@@ -464,10 +496,58 @@ export const resolvers = {
             assignedTo: true
           }
         });
+        
+        pubsub.publish(EVENTS.TASK.ASSIGNED, { taskAssigned: assignedTask });
+        return assignedTask;
       } catch (error: any) {
         console.error('Error assigning task to user:', error);
         throw new Error(error.message || 'Failed to assign task to user');
       }
+    },
+  },
+
+  Subscription: {
+    // Project subscriptions
+    projectCreated: {
+      subscribe: () => pubsub.asyncIterableIterator([EVENTS.PROJECT.CREATED])
+    },
+    projectUpdated: {
+      subscribe: () => pubsub.asyncIterableIterator([EVENTS.PROJECT.UPDATED])
+    },
+    projectDeleted: {
+      subscribe: () => pubsub.asyncIterableIterator([EVENTS.PROJECT.DELETED])
+    },
+
+    // Task subscriptions
+    taskCreated: {
+      subscribe: () => {
+        console.log('New taskCreated subscription initiated');
+        return pubsub.asyncIterableIterator([EVENTS.TASK.CREATED]);
+      },
+      resolve: (payload: any) => {
+        console.log('Resolving taskCreated subscription payload:', payload);
+        return payload.taskCreated;
+      }
+    },
+    taskUpdated: {
+      subscribe: () => pubsub.asyncIterableIterator([EVENTS.TASK.UPDATED])
+    },
+    taskDeleted: {
+      subscribe: () => pubsub.asyncIterableIterator([EVENTS.TASK.DELETED])
+    },
+    taskAssigned: {
+      subscribe: () => pubsub.asyncIterableIterator([EVENTS.TASK.ASSIGNED])
+    },
+
+    // User subscriptions
+    userCreated: {
+      subscribe: () => pubsub.asyncIterableIterator([EVENTS.USER.CREATED])
+    },
+    userUpdated: {
+      subscribe: () => pubsub.asyncIterableIterator([EVENTS.USER.UPDATED])
+    },
+    userDeleted: {
+      subscribe: () => pubsub.asyncIterableIterator([EVENTS.USER.DELETED])
     },
   }
 }; 

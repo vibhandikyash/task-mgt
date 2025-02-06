@@ -20,6 +20,8 @@ import {
   ProjectTask,
 } from '@/types';
 import type { User } from "@/types";
+import { useSubscription } from '@apollo/client';
+import { onTaskCreated, onTaskUpdated, onTaskDeleted, onTaskAssigned, onProjectCreated, onProjectUpdated, onProjectDeleted, onUserCreated } from '@/graphql/queries/query';
 
 export default function ProjectDetailPage() {
   const router = useRouter();
@@ -119,7 +121,146 @@ export default function ProjectDetailPage() {
     };
 
     fetchUsers();
-  }, [client]);
+  }, []);
+
+  // Task Subscriptions
+  const { data: taskCreatedData } = useSubscription(onTaskCreated, {
+    onData: ({ data }) => {
+      const newTask = data?.data?.taskCreated;
+      if (newTask && newTask.project.id === currentProjectId) {
+        setTasks(prevTasks => {
+          // Check if task already exists
+          if (!prevTasks.some(task => task.id === newTask.id)) {
+            return [...prevTasks, newTask];
+          }
+          return prevTasks;
+        });
+      }
+    }
+  });
+
+  const { data: taskUpdatedData } = useSubscription(onTaskUpdated, {
+    onData: ({ data }) => {
+      const updatedTask = data?.data?.taskUpdated;
+      if (updatedTask && updatedTask.project.id === currentProjectId) {
+        setTasks(prevTasks => 
+          prevTasks.map(task => 
+            task.id === updatedTask.id ? updatedTask : task
+          )
+        );
+      }
+    }
+  });
+
+  const { data: taskDeletedData } = useSubscription(onTaskDeleted, {
+    onData: ({ data }) => {
+      const deletedTask = data?.data?.taskDeleted;
+      if (deletedTask && deletedTask.project.id === currentProjectId) {
+        setTasks(prevTasks => 
+          prevTasks.filter(task => task.id !== deletedTask.id)
+        );
+      }
+    }
+  });
+
+  const { data: taskAssignedData } = useSubscription(onTaskAssigned, {
+    onData: ({ data }) => {
+      const assignedTask = data?.data?.taskAssigned;
+      if (assignedTask && assignedTask.project.id === currentProjectId) {
+        setTasks(prevTasks => 
+          prevTasks.map(task => 
+            task.id === assignedTask.id ? assignedTask : task
+          )
+        );
+      }
+    }
+  });
+
+  // Project Subscriptions
+  const { data: projectCreatedData } = useSubscription(onProjectCreated, {
+    onData: ({ data }) => {
+      const newProject = data?.data?.projectCreated;
+      if (newProject) {
+        setProjects(prevProjects => {
+          if (!prevProjects.some(project => project.id === newProject.id)) {
+            return [...prevProjects, newProject];
+          }
+          return prevProjects;
+        });
+      }
+    }
+  });
+
+  const { data: projectUpdatedData } = useSubscription(onProjectUpdated, {
+    onData: ({ data }) => {
+      const updatedProject = data?.data?.projectUpdated;
+      if (updatedProject) {
+        setProjects(prevProjects => 
+          prevProjects.map(project => 
+            project.id === updatedProject.id ? updatedProject : project
+          )
+        );
+      }
+    }
+  });
+
+  const { data: projectDeletedData } = useSubscription(onProjectDeleted, {
+    onData: ({ data }) => {
+      const deletedProject = data?.data?.projectDeleted;
+      if (deletedProject) {
+        setProjects(prevProjects => 
+          prevProjects.filter(project => project.id !== deletedProject.id)
+        );
+        // If the deleted project is the current one, redirect to projects page
+        if (deletedProject.id === currentProjectId) {
+          router.push('/projects');
+        }
+      }
+    }
+  });
+
+  // User Subscription
+  const { data: userCreatedData } = useSubscription(onUserCreated, {
+    onData: ({ data }) => {
+      const newUser = data?.data?.userCreated;
+      if (newUser) {
+        setUsers(prevUsers => {
+          if (!prevUsers.some(user => user.id === newUser.id)) {
+            return [...prevUsers, newUser];
+          }
+          return prevUsers;
+        });
+      }
+    }
+  });
+
+  // Add subscription error handling
+  useEffect(() => {
+    const subscriptionErrors = [
+      taskCreatedData?.errors,
+      taskUpdatedData?.errors,
+      taskDeletedData?.errors,
+      taskAssignedData?.errors,
+      projectCreatedData?.errors,
+      projectUpdatedData?.errors,
+      projectDeletedData?.errors,
+      userCreatedData?.errors
+    ].filter(Boolean);
+
+    if (subscriptionErrors.length > 0) {
+      console.error('Subscription errors:', subscriptionErrors);
+      setError(new Error('Subscription error occurred'));
+    }
+  }, [
+    taskCreatedData?.errors,
+    taskUpdatedData?.errors,
+    taskDeletedData?.errors,
+    taskAssignedData?.errors,
+    projectCreatedData?.errors,
+    projectUpdatedData?.errors,
+    projectDeletedData?.errors,
+    userCreatedData?.errors
+  ]);
 
   const handleAddTask = useCallback(async (newTask: { 
     title: string; 
@@ -139,9 +280,17 @@ export default function ProjectDetailPage() {
       };
 
       const createdTask = await createNewTask(client, taskInput);
-      setTasks(prevTasks => [...prevTasks, createdTask]);
       
-      // Use context method for updating project tasks
+      // Add task locally first
+      setTasks(prevTasks => {
+        // Check if task already exists
+        if (!prevTasks.some(task => task.id === createdTask.id)) {
+          return [...prevTasks, createdTask];
+        }
+        return prevTasks;
+      });
+      
+      // Update project tasks in context
       const updatedTasks: ProjectTask[] = [
         ...(selectedProject.tasks || []),
         {
@@ -157,6 +306,16 @@ export default function ProjectDetailPage() {
       updateProjectTasks(selectedProject.id, updatedTasks);
       setIsNewTaskDialogOpen(false);
       setError(null);
+
+      // Optional: Clean up any potential duplicates after a delay
+      setTimeout(() => {
+        setTasks(prevTasks => {
+          return prevTasks.filter((task, index, self) =>
+            index === self.findIndex(t => t.id === task.id)
+          );
+        });
+      }, 1000);
+
     } catch (error) {
       setError(error instanceof Error ? error : new Error('Failed to create task'));
     } finally {
