@@ -25,7 +25,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
   const addProject = useCallback((project: Project) => {
-    setProjects(prev => [...prev, project]);
+    setProjects(prev => {
+      if (prev.some(p => p.id === project.id)) {
+        return prev;
+      }
+      return [...prev, project];
+    });
   }, []);
 
   const updateProject = useCallback((projectId: string, data: UpdateProjectInput) => {

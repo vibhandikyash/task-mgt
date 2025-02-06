@@ -11,7 +11,7 @@ interface JwtPayload {
 
 export async function createContext({ req }: { req: Request }): Promise<Context> {
   try {
-    const authHeader = req.headers.get('authorization') || '';
+    const authHeader = req?.headers?.get('authorization') || '';
 
     const token = authHeader.split(' ')[1]; // Get the token part from "Bearer <token>"
 

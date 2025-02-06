@@ -126,4 +126,22 @@ export const typeDefs = gql`
     signUp(input: SignUpInput!): AuthPayload!
     signIn(input: SignInInput!): AuthPayload!
   }
+
+  type Subscription {
+    # Project subscriptions
+    projectCreated: Project!
+    projectUpdated: Project!
+    projectDeleted: Project!
+    
+    # Task subscriptions
+    taskCreated: Task!
+    taskUpdated: Task!
+    taskDeleted: Task!
+    taskAssigned: Task!
+    
+    # User subscriptions
+    userCreated: User!
+    userUpdated: User!
+    userDeleted: User!
+  }
 `;
